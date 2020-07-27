@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+
+<!-- nasa api key ZDhkcezHdqQGnYbmZUnORceRXH3RA8CMGj6HfQXJ -->
+<!-- https://api.nasa.gov/planetary/apod?api_key=ZDhkcezHdqQGnYbmZUnORceRXH3RA8CMGj6HfQXJ -->
+
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css"
+    integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+
+<style>
+    /* for attribute to prevent flickering on elements, hiding/showing after update */
+    [v-cloak] {
+        display: none;
+    }
+    .highlight {
+        background-color: yellow;
+    }
+</style>
+
+<div id="app">
+    <div class="container">
+        <another-comp></another-comp>
+        <my-comp></my-comp>
+
+        <!-- two instances of components here, each using thier own api calls -->
+        <!-- optional slot example included for referece in component -->
+        <my-img-comp>
+            <!-- <h3 slot="title">#1</h3>
+            <p slot="caption">Heres todays pic</p> -->
+        </my-img-comp>
+
+        <!-- passing in a 'date 'prop here to use in component, changes the image to prior dates -->
+        <my-img-comp date="2018-08-07">
+                <!-- <h3 slot="title">#2</h3>
+                <p slot="caption" slot-scope="pic">The date is {{pic.date}}</p> -->
+        </my-img-comp>
+        
+        <h1 v-cloak>{{greeting}}</h1>
+        
+        <div class="card mt-5"></div>
+            <h2 class="card-header">Near Earth Objects</h2>
+            <div class="m-3" v-cloak v-if="numNeos > 0 && showSummary">
+                <p>Showing {{numNeos}} items</p>
+                <p>{{closestObject}} has the shortest miss distance</p>
+            </div>
+            <div class="m-3">
+                <!-- flips value of boolean on click -->
+                <a href="#" @click="showSummary = !showSummary">Show/hide summary</a>
+            </div>
+            <table class="table table-striped">
+                <thead class="thead-light">
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Close Approach Date</th>
+                    <th>Miss Distance</th>
+                    <th>Remove</th>
+                </thead>
+                <tbody v-cloak>
+                    <!-- index is optional, key is optional -->
+                    <!-- for style binding provide the css values in a JS object. Moved to function below. ex) :style="{'border': 'solid 3px red'}" -->
+                    <!-- an array of style objects is also acceptable -->
+                    <!-- can insert normal style in addition to Vue style binding -->
+                    <tr v-for="(e, index) in neos" :key="e.neo_reference_id" :style="getRowStyle(e)" style="color: green">
+                        <td>{{index + 1}}</td>
+                        <td>{{e.name}}</td>
+                        <td>{{getCloseApproachDate(e)}}</td>
+                        <td>
+                            <ul v-if="e.close_approach_data.length > 0">
+                                <!-- key is optional -->
+                                <li v-for="(value, key) in e.close_approach_data[0].miss_distance">
+                                    {{key}}: {{value}}
+                                </li>
+                            </ul>
+                        </td>
+                        <!-- vue css class binding, from css above, boolean here can also be a function call. Can also pass array of objects -->
+                        <td :class="{'highlight': true}">
+                            <button @click="remove(index)" class="btn btn-warning">Remove</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <!-- or use v-show="!submitted" -->
+            <!-- <form v-if="!submitted" class="mt-5"> -->
+            <form v-show="!submitted" class="mt-5">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <!-- :value syntactic sugar for v-bind:value -->
+                    <!-- <input type="email" :value="email" class="form-control form-control-lg"> -->
+            
+                    <!-- v-model, stands for view model, for 2 way binding -->
+                    <input type="email" v-model="email" class="form-control form-control-lg">
+                </div>
+                <!-- added .prevent , to trigger event.preventDefault() -->
+                <!-- @ is syntantic sugar for v-on: -->
+                <button type="submit" @click.prevent="process" class="btn btn-primary">Submit</button>
+            </form>
+            <!-- or use v-else instead of  v-if="submitted" if its comes right after another condition. 
+                        If and else remove elements from dom, v-show hides them in css 
+                    v-clock-->
+            <h2 v-show="submitted" v-cloak>Thanks for submitting</h2>
+        </div>
+    </div>
+
+
+
+<!-- For prototyping or learning purposes, you can use the latest version with:
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+For production, we recommend linking to a specific version number and build to avoid unexpected breakage from newer
+versions:
+
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script> -->
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<script>
+    //registering new comp and using prop 'date' in the template and methods
+    //optional example of slots for specific insert points in html
+    Vue.component('my-img-comp', {
+        template: '<div>'
+            // + '<slot name="title"<h3>Untitled</h3></slot>' //using slots to target specific areas (named slot tags) in html, here is a default value
+            + '<img width="300" height="200" :src="imgSrc" :title="imgTitle">' 
+            // + '<slot name="caption" :date="date"><p>Unknown date</p></slot>'
+            + '<p> {{date || "today"}} </p>'
+            + '</div>',
+        props: ['date'], //a prop automatically becomes a property. ex) using {{date}} conditionally above and this.date below
+        data: function() {
+                return { //data property for a component must be a function that returns an object (so that multiple instances of comp can be used on single page)
+                    imgSrc: '',
+                    imgTitle: ''
+                };
+            },
+        created: function () {
+            this.fetchNasaImg();
+            setTimeout(() => { this.customEvent('testing'); }, 5000);
+        },
+        methods: {
+        fetchNasaImg: function () {
+            const apiKey = 'ZDhkcezHdqQGnYbmZUnORceRXH3RA8CMGj6HfQXJ';
+            let imageUrl = 'https://api.nasa.gov/planetary/apod?api_key=' + apiKey;
+
+            if (this.date) { //using prop passed in from tag in html
+                imageUrl += '&date=' + this.date;
+            }
+
+            axios.get(imageUrl)
+                .then(response => { //using arrow syntax here for lexical context that uses the "this" of this component
+                    this.imgSrc = response.data.url;
+                    this.imgTitle = response.data.title;
+                });
+            },
+        customEvent: function (testData) { //custom function example with emit,(shows up in Events tab of Vue debugger)
+                //best used for mutating data needs in custom components
+                this.$emit('fireCustomEvent', testData); // 'fireCustomEvent' used in tag of html above
+            },
+        }
+    });
+    //-------------------------------------------------------------------------------------------- end custom component
+
+
+
+        // convention is to add a hyphon to custom tags
+        Vue.component('my-comp', { //registers this as a global Vue component
+            template: '<strong>A static element</strong>'
+        });
+
+        //data property for a component must be a function that returns an object (so that multiple instances of comp can be used on single page)
+        let anotherComp = {
+            data: function () {
+                return {
+                    msg: 'Hello from another comp'
+                }
+            },
+            template: '<h1>{{msg}}</h1>',
+        }
+
+        //vm stands for view model
+        let vm = new Vue({
+            el: '#app',
+            components: { //components registered with just this Vue instance, instead of globally above Vue.component
+                'another-comp': anotherComp //property name is the tag name to be used
+            },
+            data: {
+                greeting: 'Hello from Vue',
+                email: 'test@test.com',
+                submitted: false,
+                neos: [],
+                showSummary: true
+            },
+            //computed properties use functions that return a value that's cached until any values it depends on are updated, in which case recomputed
+            //example here is calculating the closest distance of a NEO and will update if any are removed/added to the array
+            computed: {
+                numNeos: function () {
+                    return this.neos.length;
+                },
+                closestObject: function () {
+                    let neosHavingData = this.neos.filter(e => e.close_approach_data.length > 0)
+                        .map(e => {
+                            return { name: e.name, miles: e.close_approach_data[0].miss_distance_miles }
+                        })
+                        .sort((a, b) => a.miles - b.miles);
+
+                    return neosHavingData[0].name;
+                }
+            },
+            created: function () {
+                this.fetchNeos();
+            },
+            methods: {
+                process: function () {
+                    this.submitted = true;
+                },
+                fetchNeos: function () {
+                    const apiKey = 'ZDhkcezHdqQGnYbmZUnORceRXH3RA8CMGj6HfQXJ';
+                    const neosUrl = 'https://api.nasa.gov/neo/rest/v1/neo/browse?api_key=' + apiKey;
+                    axios.get(neosUrl)
+                        .then(response => {
+                            this.neos = response.data.near_earth_objects;
+                            console.log(response);
+                        });
+                },
+                getCloseApproachDate: function (e) {
+                    if (e.close_approach_data.length > 0) {
+                        return e.close_approach_data[0].close_approach_date;
+                    }
+                    return 'N/A'
+
+                },
+                remove: function (index) {
+                    this.neos.splice(index, 1);
+                },
+                getRowStyle: function (e) {
+                    if (e.close_approach_data.length === 0) {
+                        return {
+                            'border': 'solid 3px red',
+                            'color': 'red'
+                        };
+                    }
+                }
+            }
+        });
+
+
+</script>
+
